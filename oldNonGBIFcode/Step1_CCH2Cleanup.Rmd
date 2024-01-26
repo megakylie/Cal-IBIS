@@ -1,0 +1,125 @@
+---
+title: "Clean all plant records"
+author: "Josie Lesage"
+date: "12/11/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = TRUE)
+
+# Setup packages
+library(rgbif)
+library(tidyverse)
+```
+
+# CCH2 Data
+
+## Cleaning data and removing potential duplicates
+The code below should be run after you have downloaded datasets for each of the islands using the spatial/WKT module and through the terms searches in the CCH2 database.
+
+****
+To begin, use ctrl+F to find and *replace all* of the previous dates (for instance, "Dec 2020") with the new date ("Mar 2020").
+****
+
+
+# Term Data
+To clean and generate a single data file, we must begin by extracting each zip file to its folder. 
+```{r CCH2 unzip}
+cchterm_zipfiles <- list.files("Data/Dec 2020/CCH2/Terms", pattern = "*.zip")
+
+walk(cchterm_zipfiles, ~ unzip(zipfile = str_c("Data/Dec 2020/CCH2/Terms/", .x),
+                       exdir = str_c("Data/Dec 2020/CCH2/Terms/Unzipped/", .x),
+                       overwrite = TRUE))
+```
+
+Now, we extract the occurrence data for each file, and glue all of the data together.
+
+
+```{r extract csvs and glue}
+cch2term_occpath <- "Data/Dec 2020/CCH2/Terms/Unzipped/"
+cch2term_occdirs <- list.files(cch2term_occpath)
+
+cch2_terms <- read_csv("Data/Dec 2020/CCH2/Headers.csv", col_types = cols(.default = "c"))
+
+for(dir in cch2term_occdirs) {
+  sub_folders = list.files(paste(cch2term_occpath,dir,sep = ""))
+  if (any(sub_folders %in% "occurrences.csv")) {
+    ## there is occurrences.csv in this directory read it in and append to a data.frame.
+    ## read in data 
+    temp_data = read_csv(file = paste(cch2term_occpath,dir,"/occurrences.csv",sep = ""), col_types = cols(.default = "c"))
+    ## append
+    cch2_terms = rbind(cch2_terms,temp_data);
+  } else {
+    ## try go one more directory deeper
+    for(sub_dir in sub_folders) {
+      sub_sub_files = list.files(paste(cch2term_occpath,dir,"/",sub_dir,sep = ""))             
+      if (any(sub_sub_files %in% "occurrences.csv")) {
+        ## found occurrences.csv read it in and append it
+        temp_data = read.csv(file = paste(cch2term_occpath,dir,"/",sub_dir,"/occurrences.csv",sep = ""))
+        cch2_terms = rbind(cch2_terms,temp_data);
+      } else {
+        warning("could not find the file 'occurrences.csv' two directories deep")
+      }
+    } 
+  }
+}
+
+```
+
+
+Voila, "cch2_terms" is a huge dataset and has everyone (but probably some dupes). 
+
+# Spatial/WKT data
+
+There are fewer WKT datasets, but we need to extact and glue them too. 
+```{r unzip WKTs}
+cchwkt_zipfiles <- list.files("Data/Dec 2020/CCH2/WKTs", pattern = "*.zip")
+
+walk(cchwkt_zipfiles, ~ unzip(zipfile = str_c("Data/Dec 2020/CCH2/WKTs/", .x),
+                       exdir = str_c("Data/Dec 2020/CCH2/WKTs/Unzipped/", .x),
+                       overwrite = TRUE))
+```
+
+```{r import WKTs}
+cchwkt_occpath <- "Data/Dec 2020/CCH2/WKTs/Unzipped/"
+cchwkt_occdirs <- list.files(cchwkt_occpath)
+
+cch2_wkts <- read_csv("Data/Dec 2020/CCH2/Headers.csv", col_types = cols(.default = "c"))
+
+for(dir in cchwkt_occdirs) {
+  sub_folders = list.files(paste(cchwkt_occpath,dir,sep = ""))
+  if (any(sub_folders %in% "occurrences.csv")) {
+    ## there is occurrences.csv in this directory read it in and append to a data.frame.
+    ## read in data 
+    temp_data = read_csv(file = paste(cchwkt_occpath,dir,"/occurrences.csv",sep = ""), col_types = cols(.default = "c"))
+    ## append
+    cch2_wkts = rbind(cch2_wkts,temp_data);
+  } else {
+    ## try go one more directory deeper
+    for(sub_dir in sub_folders) {
+      sub_sub_files = list.files(paste(cchwkt_occpath,dir,"/",sub_dir,sep = ""))             
+      if (any(sub_sub_files %in% "occurrences.csv")) {
+        ## found occurrences.csv read it in and append it
+        temp_data = read.csv(file = paste(cchwkt_occpath,dir,"/",sub_dir,"/occurrences.csv",sep = ""))
+        cch2_wkts = rbind(cch2_wkts,temp_data);
+      } else {
+        warning("could not find the file 'occurrences.csv' two directories deep")
+      }
+    } 
+  }
+}
+```
+
+# The final gluing
+
+Now that we have both a CCH2 term and a CCH2 WKT dataset, we need to remove as many duplicates as we possibly can. 
+
+```{r dupe clear}
+cch2_all <- full_join(cch2_terms, cch2_wkts)
+cch2_all_dist <- distinct(cch2_all, id, .keep_all = TRUE)
+cch2_all_dist_2 <- distinct(cch2_all_dist, occurrenceID, .keep_all = TRUE)
+
+write.csv(cch2_all_dist_2, file = "Data/Dec 2020/CCH2/CCH_Clean.csv", na="", row.names=FALSE)
+```
+

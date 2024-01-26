@@ -1,0 +1,128 @@
+---
+title: "Step4_SEINetCleanup"
+author: "Josie Lesage"
+date: "12/17/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = TRUE)
+
+# Setup packages
+library(tidyverse)
+```
+
+# SEINet Data
+
+## Cleaning data and removing potential duplicates
+The code below should be run after you have downloaded datasets for each of the islands and the special terms searches, in the SEINet databases.
+
+****
+To begin, use ctrl+F to find and *replace all* of the previous dates (for instance, "Dec 2020") with the new date ("Mar 2020").
+****
+
+
+# Term Data
+To clean and generate a single data file, we must begin by extracting each zip file to its folder. 
+
+```{r seinet unzip}
+seiterm_zipfiles <- list.files("Data/Dec 2020/SEINet/Terms", pattern = "*.zip")
+
+walk(seiterm_zipfiles, ~ unzip(zipfile = str_c("Data/Dec 2020/SEINet/Terms/", .x),
+                       exdir = str_c("Data/Dec 2020/SEINet/Terms/Unzipped/", .x),
+                       overwrite = TRUE))
+```
+
+Now, we extract the occurrence data for each file, and glue all of the data together.
+
+```{r extract csvs and glue}
+seiterm_occpath <- "Data/Dec 2020/SEINet/Terms/Unzipped/"
+seiterm_occdirs <- list.files(seiterm_occpath)
+
+seinet_terms <- read_csv("Data/Dec 2020/SEINet/Headers.csv", col_types = cols(.default = "c"))
+
+for(dir in seiterm_occdirs) {
+  sub_folders = list.files(paste(seiterm_occpath,dir,sep = ""))
+  if (any(sub_folders %in% "occurrences.csv")) {
+    ## search for "occurrences.csv" in the directory, append to a data.frame if so
+    temp_data = read_csv(file = paste(seiterm_occpath,dir,"/occurrences.csv",sep = ""), col_types = cols(.default = "c"))
+    seinet_terms = rbind(seinet_terms,temp_data);
+  } else {
+    ## if we can't find it, search one directory deeper
+    for(sub_dir in sub_folders) {
+      sub_sub_files = list.files(paste(seiterm_occpath,dir,"/",sub_dir,sep = ""))             
+      if (any(sub_sub_files %in% "occurrences.csv")) {
+        ## found occurrences.csv read it in and append it
+        temp_data = read.csv(file = paste(seiterm_occpath,dir,"/",sub_dir,"/occurrences.csv",sep = ""))
+        seinet_terms = rbind(seinet_terms,temp_data);
+      } else {
+        warning("could not find the file 'occurrences.csv' two directories deep")
+      }
+    } 
+  }
+}
+
+```
+
+Voila, "seinet_terms" is a huge dataset and has everyone (but has many dupes). 
+
+# WKT data
+
+There are fewer WKT datasets, but we need to extact and glue them too. 
+```{r unzip WKTs}
+seiwkt_zipfiles <- list.files("Data/Dec 2020/SEINet/WKTs", pattern = "*.zip")
+
+walk(seiwkt_zipfiles, ~ unzip(zipfile = str_c("Data/Dec 2020/SEINet/WKTs/", .x),
+                       exdir = str_c("Data/Dec 2020/SEINet/WKTs/Unzipped/", .x),
+                       overwrite = TRUE))
+```
+
+```{r import and glue seinet WKTs}
+seiwkt_occpath <- "Data/Dec 2020/SEINet/WKTs/Unzipped/"
+seiwkt_occdirs <- list.files(seiwkt_occpath)
+
+seinet_wkts <- read_csv("Data/Dec 2020/SEINet/Headers.csv", col_types = cols(.default = "c"))
+
+for(dir in seiwkt_occdirs) {
+  sub_folders = list.files(paste(seiwkt_occpath,dir,sep = ""))
+  if (any(sub_folders %in% "occurrences.csv")) {
+    ## there is occurrences.csv in this directory read it in and append to a data.frame.
+    ## read in data 
+    temp_data = read_csv(file = paste(seiwkt_occpath,dir,"/occurrences.csv",sep = ""), col_types = cols(.default = "c"))
+    ## append
+    seinet_wkts = rbind(seinet_wkts,temp_data);
+  } else {
+    ## try go one more directory deeper
+    for(sub_dir in sub_folders) {
+      sub_sub_files = list.files(paste(seiwkt_occpath,dir,"/",sub_dir,sep = ""))             
+      if (any(sub_sub_files %in% "occurrences.csv")) {
+        ## found occurrences.csv read it in and append it
+        temp_data = read.csv(file = paste(seiwkt_occpath,dir,"/",sub_dir,"/occurrences.csv",sep = ""))
+        seinet_wkts = rbind(seinet_wkts,temp_data);
+      } else {
+        warning("could not find the file 'occurrences.csv' two directories deep")
+      }
+    } 
+  }
+}
+```
+
+# The final gluing
+
+Now that we have both a seinet term and a seinet WKT dataset, we need to remove as many duplicates as we possibly can. 
+
+Then, we'll refer this dataset against the CCH2 dataset!
+
+```{r dupe clear}
+seinet_all <- full_join(seinet_terms, seinet_wkts)
+seinet_all_dist <- distinct(seinet_all, id, .keep_all = TRUE)
+seinet_all_dist_2 <- distinct(seinet_all, occurrenceID, .keep_all = TRUE)
+
+cch2 <- read_csv("Data/Dec 2020/CCH2/CCH_Clean.csv", col_types = cols(.default = "c"))
+
+seinet_no_cch <- anti_join(seinet_all_dist_2, cch2, by = "id")
+seinet_no_cch_2 <- anti_join(seinet_no_cch, cch2, by = "occurrenceID")
+
+write.csv(seinet_no_cch_2, file = "Data/Dec 2020/SEINet/SEINet_Clean.csv", na="", row.names=FALSE)
+```
+

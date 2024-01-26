@@ -1,0 +1,120 @@
+---
+title: "Step3_SCANBugsCleanup"
+author: "Josie Lesage"
+date: "12/17/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = TRUE)
+
+# Setup packages
+library(tidyverse)
+```
+
+# SCAN-Bugs Data
+
+## Cleaning data and removing potential duplicates
+The code below should be run after you have downloaded datasets for each of the islands, and the special terms searches, in the SCAN-Bugs database.
+
+****
+To begin, use ctrl+F to find and *replace all* of the previous dates (for instance, "Dec 2020") with the new date ("Mar 2020").
+****
+
+
+# Term Data
+To clean and generate a single data file, we must begin by extracting each zip file to its folder. 
+
+
+To clean and generate a single data file, we must begin by extracting each zip file to its folder. 
+```{r SCAN unzip}
+scanterm_zipfiles <- list.files("Data/Dec 2020/SCAN/Terms", pattern = "*.zip")
+
+walk(scanterm_zipfiles, ~ unzip(zipfile = str_c("Data/Dec 2020/SCAN/Terms/", .x),
+                       exdir = str_c("Data/Dec 2020/SCAN/Terms/Unzipped/", .x),
+                       overwrite = TRUE))
+```
+
+```{r extract and glue term csvs}
+scanterm_occpath <- "Data/Dec 2020/SCAN/Terms/Unzipped/"
+scanterm_occdirs <- list.files(scanterm_occpath)
+
+scan_terms <- read_csv("Data/Dec 2020/SCAN/Headers.csv", col_types = cols(.default = "c"))
+
+for(dir in scanterm_occdirs) {
+  sub_folders = list.files(paste(scanterm_occpath,dir,sep = ""))
+  if (any(sub_folders %in% "occurrences.csv")) {
+    ## search for "occurrences.csv" in the directory, append to a data.frame if so
+    temp_data = read_csv(file = paste(scanterm_occpath,dir,"/occurrences.csv",sep = ""), col_types = cols(.default = "c"))
+    scan_terms = rbind(scan_terms,temp_data);
+  } else {
+    ## if we can't find it, search one directory deeper
+    for(sub_dir in sub_folders) {
+      sub_sub_files = list.files(paste(scanterm_occpath,dir,"/",sub_dir,sep = ""))             
+      if (any(sub_sub_files %in% "occurrences.csv")) {
+        ## found occurrences.csv read it in and append it
+        temp_data = read.csv(file = paste(scanterm_occpath,dir,"/",sub_dir,"/occurrences.csv",sep = ""))
+        scan_terms = rbind(scan_terms,temp_data);
+      } else {
+        warning("could not find the file 'occurrences.csv' two directories deep")
+      }
+    } 
+  }
+}
+```
+
+Voila, "SCAN_terms" is a huge dataset and has everyone (but probably some dupes). 
+
+# Spatial/WKT data
+
+There are fewer WKT datasets, but we need to extact and glue them too. 
+```{r unzip SCAN WKTs}
+scanwkt_zipfiles <- list.files("Data/Dec 2020/SCAN/WKTs", pattern = "*.zip")
+
+walk(scanwkt_zipfiles, ~ unzip(zipfile = str_c("Data/Dec 2020/SCAN/WKTs/", .x),
+                       exdir = str_c("Data/Dec 2020/SCAN/WKTs/Unzipped/", .x),
+                       overwrite = TRUE))
+```
+
+```{r import and glue SCAN WKTs}
+scanwkts_occpath <- "Data/Dec 2020/SCAN/WKTs/Unzipped/"
+scanwkts_occdirs <- list.files(scanwkts_occpath)
+
+scan_wkts <- read_csv("Data/Dec 2020/SCAN/Headers.csv", col_types = cols(.default = "c"))
+
+for(dir in scanwkts_occdirs) {
+  sub_folders = list.files(paste(scanwkts_occpath,dir,sep = ""))
+  if (any(sub_folders %in% "occurrences.csv")) {
+    ## search for "occurrences.csv" in the directory, append to a data.frame if so
+    temp_data = read_csv(file = paste(scanwkts_occpath,dir,"/occurrences.csv",sep = ""), col_types = cols(.default = "c"))
+    scan_wkts = rbind(scan_wkts,temp_data);
+  } else {
+    ## if we can't find it, search one directory deeper
+    for(sub_dir in sub_folders) {
+      sub_sub_files = list.files(paste(scanwkts_occpath,dir,"/",sub_dir,sep = ""))             
+      if (any(sub_sub_files %in% "occurrences.csv")) {
+        ## found occurrences.csv read it in and append it
+        temp_data = read.csv(file = paste(scanwkts_occpath,dir,"/",sub_dir,"/occurrences.csv",sep = ""))
+        scan_terms = rbind(scan_wkts,temp_data);
+      } else {
+        warning("could not find the file 'occurrences.csv' two directories deep")
+      }
+    } 
+  }
+}
+
+  
+
+```
+
+# The final gluing
+
+Now that we have both a SCAN term and a SCAN WKT dataset, we need to remove as many duplicates as we possibly can. SCAN is the master "bugs" dataset, so we won't compare it to any other datasets. 
+
+```{r dupe clear}
+SCAN_all <- full_join(scan_terms, scan_wkts)
+SCAN_all_dist <- distinct(SCAN_all, id, .keep_all = TRUE)
+SCAN_all_dist_2 <- distinct(SCAN_all_dist, occurrenceID, .keep_all = TRUE) 
+
+write.csv(SCAN_all_dist_2, file = "Data/Dec 2020/SCAN/SCAN_Clean.csv", na="", row.names=FALSE)
+```
