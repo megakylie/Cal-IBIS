@@ -12,7 +12,7 @@ editor_options:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, warning = TRUE)
 
-# Setup packages
+#Download packages
 library(tidyverse) 
 library(rgbif) # package to download from gbif https://docs.ropensci.org/rgbif/articles/rgbif.html#get-occurrence-data-from-gbif 
 library(usethis) # package recommended to use with rgbif to save GBIF credentials in a .Renviron file so you don't have to enter them in the code with each download query directions: https://docs.ropensci.org/rgbif/articles/gbif_credentials.html
